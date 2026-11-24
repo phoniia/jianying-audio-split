@@ -1,0 +1,6 @@
+# 只依赖 pycryptodome（处理加密草稿需要）
+pycryptodome>=3.20
+
+# ffmpeg 是外部程序，不在 pip 里。Windows 装法二选一：
+#   winget install Gyan.FFmpeg
+#   或从 https://ffmpeg.org/download.html 下载后把 bin 目录加进 PATH

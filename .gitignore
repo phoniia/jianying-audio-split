@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.bak
+*.bak-*
+*.encbak
+*.log
+.backup/
+.meta_snapshots/
+.kf_state.json
+备份*/
