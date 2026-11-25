@@ -409,6 +409,13 @@ def sync_copies(project: Path) -> int:
 
     # 4) 顺手清掉加载失败残留的 journal，否则下次还会自锁
     clean_journal(project)
+
+    # 5) 清单里若有条目指向已被删掉的快照，剪映按清单找不到文件会直接拒绝加载。
+    #    sync_copies 只往清单里加条目、从不删；而加载失败时剪映/工具会清掉旧
+    #    load.bak，于是清单越来越长、失效条目越来越多，最终整份草稿打不开。
+    pruned = prune_backup_manifest(project)
+    if pruned:
+        print(f"  已剔除 {pruned} 条失效备份清单记录")
     return n
 
 
@@ -431,6 +438,47 @@ def clean_journal(project: Path) -> list[str]:
             except OSError:
                 pass
     return gone
+
+
+def prune_backup_manifest(project: Path) -> int:
+    """删除 .backup/timeline_backup_manifest.json 中指向不存在快照的条目。
+
+    2026-11-25 定位到的真凶：失败副本的清单有 57 条，其中 22 条指向已被清掉的
+    load.bak。剪映加载时按这份清单逐条取备份，有一条找不到就判草稿损坏，
+    随后不断写 load.bak + journal，形成自锁。克隆稿没有继承旧清单（只有 4 条
+    且全部有效），所以正文/外壳完全相同的克隆稿却都能正常打开。
+
+    返回剔除的条目数；清单不存在或无法解析时返回 0。
+    """
+    manifest = project / ".backup" / "timeline_backup_manifest.json"
+    if not manifest.is_file():
+        return 0
+    try:
+        m = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    if not isinstance(m, dict):
+        return 0
+
+    removed = 0
+    for folder, entries in list(m.items()):
+        if not isinstance(entries, dict):
+            continue
+        base = project / ".backup" / folder
+        for ts, name in list(entries.items()):
+            if not isinstance(name, str) or not (base / name).is_file():
+                del entries[ts]
+                removed += 1
+        if not entries:
+            del m[folder]
+    if removed:
+        try:
+            manifest.write_text(
+                json.dumps(m, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8")
+        except OSError:
+            return 0
+    return removed
 
 
 def touch_meta(project: Path) -> bool:
@@ -670,7 +718,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="剪映草稿加解密 / meta 体检与修复")
     ap.add_argument("action",
                     choices=["info", "decrypt", "encrypt", "ratio", "meta", "snapshot",
-                             "repair", "clean", "sync"])
+                             "repair", "clean", "manifest", "sync"])
     ap.add_argument("path", help="草稿目录")
     ap.add_argument("--keep", action="store_true", help="原地操作时不保留 .encbak 备份")
     args = ap.parse_args(argv)
@@ -727,8 +775,17 @@ def main(argv=None) -> int:
 
     if args.action == "clean":
         gone = clean_journal(project)
+        pruned = prune_backup_manifest(project)
         print(f"已删除 {len(gone)} 个残留 journal（draft_content.json.log）"
               if gone else "没有残留 journal")
+        print(f"已剔除 {pruned} 条失效备份清单记录"
+              if pruned else "备份清单无失效条目")
+        return 0
+
+    if args.action == "manifest":
+        pruned = prune_backup_manifest(project)
+        print(f"已剔除 {pruned} 条失效备份清单记录"
+              if pruned else "备份清单无失效条目")
         return 0
 
     if args.action == "sync":

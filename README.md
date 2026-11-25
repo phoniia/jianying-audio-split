@@ -97,6 +97,10 @@ python kf_split_silence.py --path "D:/.../JianyingPro Drafts/我的口播稿" --
 ```bash
 python kf_split_silence.py "我的口播稿" --restore "备份/draft_content.json.orig"
 ```
+4. **反复加载失败后，草稿可能打不开但不是正文坏了**：
+   `.backup/timeline_backup_manifest.json` 里若残留指向已删除快照的条目，
+   剪映按清单取备份失败会直接拒绝加载。先跑
+   `python kf_crypt.py manifest "草稿名"` 清理（写盘流程也会自动清）。
 
 ## 实测：检测准不准
 
